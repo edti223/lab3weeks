@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>K I L I M . N E T</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=VT323&family=Courier+Prime:ital,wght@0,400;0,700;1,400&display=swap');
+    *{margin:0;padding:0;box-sizing:border-box;}
+    :root{
+      --red:#cc0000; --blue:#0000cc; --yellow:#ffcc00;
+      --green:#006600; --bg:#c8b89a; --cream:#f0e8d0;
+    }
+    body{
+      background:var(--bg);overflow:hidden;
+      width:100vw;height:100vh;cursor:crosshair;
+      user-select:none;font-family:'VT323',monospace;
+    }
+    body.dragging{cursor:move;}
+    canvas{display:block;}
+
+    #hud{
+      position:fixed;top:0;left:0;right:0;z-index:20;
+      display:flex;justify-content:space-between;align-items:center;
+      padding:3px 12px;
+      background:var(--blue);border-bottom:3px solid var(--yellow);
+      font-size:19px;color:var(--yellow);letter-spacing:.12em;
+    }
+    .blink{animation:blink 1s step-end infinite;}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+    /* Panel */
+    #panel{
+      position:fixed;right:0;top:0;bottom:0;width:320px;
+      background:var(--cream);border-left:4px solid var(--blue);
+      z-index:30;transform:translateX(100%);
+      transition:transform .25s steps(8);
+      display:flex;flex-direction:column;
+      overflow:hidden;
+    }
+    #panel.open{transform:translateX(0);}
+    #panel-header{
+      background:var(--red);border-bottom:3px solid var(--yellow);
+      padding:8px 12px;display:flex;justify-content:space-between;align-items:center;
+    }
+    #panel-title{font-size:20px;color:var(--yellow);letter-spacing:.1em;}
+    #panel-close{
+      background:var(--yellow);border:2px solid var(--blue);
+      color:var(--blue);font-size:16px;font-family:inherit;
+      cursor:pointer;padding:2px 8px;
+    }
+    #panel-close:hover{background:var(--blue);color:var(--yellow);}
+    #panel-svg{
+      padding:20px;display:flex;justify-content:center;align-items:center;
+      background:#e8dfc8;border-bottom:2px dashed var(--blue);
+      min-height:200px;
+    }
+    #panel-svg svg{width:140px;height:140px;display:block;}
+    #panel-body{padding:16px;overflow-y:auto;flex:1;}
+    #panel-name{font-size:22px;color:var(--red);letter-spacing:.08em;margin-bottom:6px;}
+    #panel-subtitle{font-size:13px;color:var(--blue);font-family:'Courier Prime',monospace;font-style:italic;margin-bottom:12px;border-bottom:1px solid var(--blue);padding-bottom:8px;}
+    #panel-desc{font-size:13px;color:#222;font-family:'Courier Prime',monospace;line-height:1.6;}
+    #panel-footer{
+      border-top:2px solid var(--blue);padding:8px 12px;
+      font-size:12px;color:var(--blue);
+      font-family:'Courier Prime',monospace;
+    }
+
+    #marquee-wrap{
+      position:fixed;bottom:0;left:0;right:0;z-index:20;
+      background:var(--red);border-top:3px solid var(--yellow);
+      overflow:hidden;height:26px;
+    }
+    #marquee{
+      display:inline-block;white-space:nowrap;
+      font-size:20px;color:var(--yellow);letter-spacing:.2em;
+      animation:scroll 32s linear infinite;padding-left:100%;
+    }
+    @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-100%)}}
+
+    #counter{
+      position:fixed;bottom:32px;left:12px;z-index:20;
+      font-size:13px;color:var(--blue);
+      background:var(--cream);border:2px solid var(--blue);
+      padding:2px 8px;line-height:1.4;
+    }
+    #zoom-hint{
+      position:fixed;bottom:32px;right:12px;z-index:20;
+      font-size:14px;color:var(--blue);
+      background:var(--cream);border:2px solid var(--blue);
+      padding:2px 8px;
+    }
+    #cursor-fx{
+      position:fixed;pointer-events:none;z-index:999;
+      width:14px;height:14px;border:2px solid var(--red);
+      transform:translate(-50%,-50%);
+    }
+  </style>
+</head>
+<body>
+
+<div id="hud">
+  <span>★ K I L I M . N E T ★</span>
+  <span class="blink">▌CLICK A SYMBOL TO DISCOVER▐</span>
+  <span id="zoom-display">1.00×</span>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<!-- Info panel -->
+<div id="panel">
+  <div id="panel-header">
+    <span id="panel-title">MOTIF INFO</span>
+    <button id="panel-close" onclick="closePanel()">✕ CLOSE</button>
+  </div>
+  <div id="panel-svg"><svg id="panel-svg-inner" viewBox="0 0 100 100"></svg></div>
+  <div id="panel-body">
+    <div id="panel-name">—</div>
+    <div id="panel-subtitle">—</div>
+    <div id="panel-desc">—</div>
+  </div>
+  <div id="panel-footer">◆ KILIM.NET — EST. 1997 ◆ ANATOLIAN TEXTILE ARCHIVE</div>
+</div>
+
+<div id="marquee-wrap">
+  <span id="marquee">◆ AKREP ◆ AŞK VE BİRLEŞİM ◆ BEREKET ◆ ÇENGEL ◆ BUKAGI ◆ CANAVAR AYAĞI ◆ ELİBELİNDE ◆ HAYAT AĞACI ◆ İBRİK ◆ KUŞ ◆ KILIM.NET — ANATOLIAN SYMBOLS ◆ EST. 1997 ◆ DRAG TO EXPLORE ◆ CLICK TO DISCOVER ◆</span>
+</div>
+
+<div id="counter">VISITORS<br><span id="count">004721</span></div>
+<div id="zoom-hint">SCROLL TO ZOOM</div>
+<div id="cursor-fx"></div>
+
+<script>
+const SVGS = {
+  akrep: { viewBox: "0 0 822 763", svg: `<path d="M713.515 661.754L612.548 762.721L511.881 662.054L411.214 762.721L310.547 662.054L209.881 762.721L108.914 661.754L209.881 560.786L310.547 661.452L411.214 560.786L511.881 661.453L612.548 560.786L713.515 661.754ZM411.586 0.798828L822 560.786H0L343.129 92.6064H151.129L223.8 165.278L122.833 266.245L21.8652 165.278L94.5371 92.6064H21.8652V0H411.586V0.798828ZM167.53 484.315H653.548L410.539 152.941L167.53 484.315ZM518.52 425.092H304.653L411.586 272.676L518.52 425.092Z" fill="black"/>` },
+  ask_ve_birlesim: { viewBox: "0 0 477 732", svg: `<path d="M477 87.6709H417.724V153.152H352.399V223.485H282.235V278.903H477V369H476V453.097H276.396V512.515H346.561V582.848H416.724V648.329H476V732H3V648.329H62.2764V582.848H127.601V512.515H197.765V453.097H3V369H0V278.903H199.604V223.485H129.439V153.152H59.2764V87.6709H0V0H477V87.6709ZM4 83.6709H63.2764V149.152H133.439V219.485H203.604V282.903H4V365H473V282.903H278.235V219.485H348.399V149.152H413.724V83.6709H473V4H4V83.6709Z" fill="black"/>` },
+  bereket: { viewBox: "0 0 1060 807", svg: `<path d="M533.075 95.2578L664.479 1.03027L830.02 176.241L702.522 287.552L621.294 210.253L664.479 166.966L702.522 204.069L740.565 176.241L660.366 88.6357L589.42 148.414L596 303L600.55 307.586L657.814 364.851H835.16L868.062 313.318L835.16 276.215L802.258 306.104L757.017 265.908L844.414 188.609L954.432 306.104L890.684 399.893L963.686 478.223L835.16 615.299L757.017 530.785L796.089 492.651L835.16 530.785L884.515 478.223L844.414 440.088H664.804L601.726 503.165V659.617L672.596 719.395L752.711 631.789L714.707 603.962L676.704 641.065L633.565 597.777L714.707 520.479L842.069 631.789L676.704 807L543.18 711.149L409.514 807L243.973 631.789L371.47 520.479L452.698 597.777L409.514 641.065L371.47 603.962L333.427 631.789L413.626 719.395L484.572 659.617V525.536L398.094 439.058H219.556L179.36 477.191L228.831 529.755L267.996 491.621L307.161 529.755L228.831 614.269L100 477.191L173.176 398.862L109.275 305.073L219.556 187.578L307.161 264.877L261.812 305.073L228.831 275.184L195.851 312.287L228.831 363.82H407.144L475.156 295.807L475.157 147.383L404.042 87.6055L323.651 175.211L361.785 203.038L399.92 165.935L443.207 209.223L361.785 286.521L233.984 175.211L399.92 0L533.075 95.2578ZM458.852 405.858L487.791 435.369L531.711 479.289L532.5 478.5L602.505 403.794L585.046 386.335L531.265 333.445L458.852 405.858ZM1059.42 396.711L988.711 467.422L918 396.711L988.711 326L1059.42 396.711ZM141.421 395.711L70.7109 466.422L0 395.711L70.7109 325L141.421 395.711Z" fill="black"/>` },
+  bereket2: { viewBox: "0 0 825 794", svg: `<path d="M285.178 172.548H284.85L393.675 324.229L449.409 246.548H449.081L573.17 74L697.259 246.548H479.633L423.166 325.249L423.259 325.315L408.855 345.39L420.834 362.085L420.953 362L532.348 517.263L545.775 498.548H545.447L669.536 326L793.625 498.548H574.953L546.632 537.172L606.633 620.802H824.259L700.17 793.35L576.081 620.802H576.409L531.355 558.006L396.812 741.5L259.258 553.899L247.85 569.802H248.178L124.089 742.35L0 569.802H217.626L243.981 533.065L218.672 498.548H0L124.089 326L248.178 498.548H247.85L258.298 513.111L274.091 491.1L274 491.035L378.563 345.293L254.626 172.548H37L161.089 0L285.178 172.548ZM273.41 534.174L396.812 706.174L517.235 538.325L440.424 431.264L440.306 431.35L393.744 366.452L273.41 534.174ZM527.148 180.275L527.169 180.291L494.546 225.762H651.064L572.767 116.784L527.148 180.275ZM83.1943 151.762H239.713L207.09 106.291L207.11 106.275L161.492 42.7842L83.1943 151.762Z" fill="black"/>` },
+  bukagi: { viewBox: "0 0 734 765", svg: `<path d="M390.464 0V111.905L443.408 45.123H720.162V86.6357H678.048L720.162 164.85L658.795 237.647L605.249 164.85H658.795L605.249 86.6357H466.271L412.725 164.85H560.728L490.938 287.584H605.249L560.728 368.805H705.723V438.595H560.728L605.249 505.377H490.938L582.988 636.534H427.164L466.271 703.316H622.095L658.795 636.534H605.249L658.795 561.329L720.162 636.534L678.048 703.316L734 697.901V764.684H443.408L390.464 697.901V764.684H343.536V703.316L296.007 764.684H0V703.316H44.5215L0 636.534L61.3672 561.329L105.889 636.534H61.3672L89.043 703.316H253.892L312.251 636.534H148.003L223.208 505.377H105.889L148.003 438.595H0V368.805H148.003L105.889 287.584H223.208L148.003 164.85H296.007L265.323 103.482H89.043L61.3672 164.85H105.889L61.3672 259.908L0 164.85L30.6836 95.0586H0V45.123H296.007L343.536 111.905V0H390.464ZM258.705 371.813H331.503V438.595H258.705L370.609 595.021L476.498 438.595H403.7V371.813H476.498L370.609 215.387L258.705 371.813Z" fill="black"/>` },
+  bukagi2: { viewBox: "0 0 932 932", svg: `<path d="M931.014 465.507L465.507 931.014L0 465.507L465.507 0L931.014 465.507ZM358 302.625H448.4V358.543H358L449.569 449.001H86V482.001H449.569L358 572.459H448.4V628.377H358L465.934 735.001L573.868 628.377H482.994V572.459H573.867L482.298 482.001H846V449.001H482.298L573.868 358.543H482.994V302.625H573.867L465.934 196.001L358 302.625Z" fill="black"/>` },
+  canavar_ayagi: { viewBox: "0 0 843 456", svg: `<path d="M842.219 163.5H778.109V293.25H840.286L718.609 456L598.241 295H483.295L587.989 434.75H263.229L367.924 295H243.978L123.609 456L1.93262 293.25H73.1094V163.5H0L122.109 0L243.099 162H375.416L263.229 12.25H587.989L475.803 162H599.12L720.109 0L842.219 163.5Z" fill="black"/>` },
+  cengel: { viewBox: "0 0 542 796", svg: `<path d="M486.984 183.193H488V332.193H396V423.193H304V517.193H204V611.193H121.973L194.719 737.193H403.063L473.934 614.443H320.813L429.5 468.193L533.975 608.775L541.347 613.032L435.949 795.586L435.27 795.193H161V794.768L160.99 794.773L55 611.193V462.193H155V367.193H246V273.193H339V183.193H420.012L348.42 59.1934H138.511L66.4863 183.943H218.187L109.5 330.193L1.16992 184.424L0 183.748L105.397 1.19434L106 1.54199V1.19336H379.15L381.218 0L486.984 183.193Z" fill="black"/>` },
+  cengel2: { viewBox: "0 0 224 757", svg: `<path fill-rule="evenodd" clip-rule="evenodd" d="M223.5 276.5L99 163V69L155 129V54H52V171.5L223.5 345V756H0.5V459.5L128 548V660L74 612.5V685H172V548L0.5 413.5V0.5H223.5V276.5ZM49.5 265.5V364L191.5 483V382.5L49.5 265.5Z" fill="black"/>
+<path d="M99 163H98.5V163.221L98.6631 163.37L99 163ZM223.5 276.5L223.163 276.87L224 277.632V276.5H223.5ZM99 69L99.3655 68.6588L98.5 67.7315V69H99ZM155 129L154.634 129.341L155.5 130.269V129H155ZM155 54H155.5V53.5H155V54ZM52 54V53.5H51.5V54H52ZM52 171.5H51.5V171.705L51.6444 171.852L52 171.5ZM223.5 345H224V344.795L223.856 344.648L223.5 345ZM223.5 756V756.5H224V756H223.5ZM0.5 756H0V756.5H0.5V756ZM0.5 459.5L0.785107 459.089L0 458.544V459.5H0.5ZM128 548H128.5V547.738L128.285 547.589L128 548ZM128 660L127.67 660.375L128.5 661.106V660H128ZM74 612.5L74.3302 612.125L73.5 611.394V612.5H74ZM74 685H73.5V685.5H74V685ZM172 685V685.5H172.5V685H172ZM172 548H172.5V547.757L172.309 547.607L172 548ZM0.5 413.5H0V413.743L0.191444 413.893L0.5 413.5ZM0.5 0.5V0H0V0.5H0.5ZM223.5 0.5H224V0H223.5V0.5ZM49.5 364H49V364.233L49.1788 364.383L49.5 364ZM49.5 265.5L49.8179 265.114L49 264.44V265.5H49.5ZM191.5 483L191.179 483.383L192 484.071V483H191.5ZM191.5 382.5H192V382.264L191.818 382.114L191.5 382.5ZM99 163L98.6631 163.37L223.163 276.87L223.5 276.5L223.837 276.13L99.3369 162.63L99 163ZM99 69H98.5V163H99H99.5V69H99ZM155 129L155.366 128.659L99.3655 68.6588L99 69L98.6345 69.3412L154.634 129.341L155 129ZM155 54H154.5V129H155H155.5V54H155ZM52 54V54.5H155V54V53.5H52V54ZM52 171.5H52.5V54H52H51.5V171.5H52ZM223.5 345L223.856 344.648L52.3556 171.148L52 171.5L51.6444 171.852L223.144 345.352L223.5 345ZM223.5 756H224V345H223.5H223V756H223.5ZM0.5 756V756.5H223.5V756V755.5H0.5V756ZM0.5 459.5H0V756H0.5H1V459.5H0.5ZM128 548L128.285 547.589L0.785107 459.089L0.5 459.5L0.214893 459.911L127.715 548.411L128 548ZM128 660H128.5V548H128H127.5V660H128ZM74 612.5L73.6698 612.875L127.67 660.375L128 660L128.33 659.625L74.3302 612.125L74 612.5ZM74 685H74.5V612.5H74H73.5V685H74ZM172 685V684.5H74V685V685.5H172V685ZM172 548H171.5V685H172H172.5V548H172ZM0.5 413.5L0.191444 413.893L171.691 548.393L172 548L172.309 547.607L0.808556 413.107L0.5 413.5ZM0.5 0.5H0V413.5H0.5H1V0.5H0.5ZM223.5 0.5V0H0.5V0.5V1H223.5V0.5ZM223.5 276.5H224V0.5H223.5H223V276.5H223.5ZM49.5 364H50V265.5H49.5H49V364H49.5ZM191.5 483L191.821 482.617L49.8212 363.617L49.5 364L49.1788 364.383L191.179 483.383L191.5 483ZM191.5 382.5H191V483H191.5H192V382.5H191.5ZM49.5 265.5L49.1821 265.886L191.182 382.886L191.5 382.5L191.818 382.114L49.8179 265.114L49.5 265.5Z" fill="black"/>` },
+  elibelinde: { viewBox: "0 0 1175 1874", svg: `<path d="M1175 646.141L987.5 785.641V915.641H847.5V785.641L1082.5 598.641V473.641H900L687.5 668.641V945.641L1005 1205.64V1525.64L627.5 1872.64H590V1873.14H547.5L170 1526.14V1206.14L487.5 946.141V669.141L275 474.141H92.5V599.141L327.5 786.141V916.141H187.5V786.141L0 646.641V374.141H362.5L587.247 596.418L812.5 373.641H1175V646.141ZM275 1276.14V1458.64L587.228 1745.59L900 1458.14V1275.64L587.778 995.632L275 1276.14ZM837.712 1361.69L580.023 1608.71L333 1351.02L590.688 1104L837.712 1361.69ZM845.712 257.688L588.023 504.712L341 247.024L598.688 0L845.712 257.688Z" fill="black"/>` },
+  elibelinde2: { viewBox: "0 0 1560 1749", svg: `<path d="M976.696 1515.98L743.678 1749L510.66 1515.98L743.678 1282.96L976.696 1515.98ZM584.196 818L271.195 1133L383.695 1233L740.196 884L1096 1190.5L1456.7 838.163L1560 941L1096 1411L740.196 1133L383.695 1441L55.1953 1109.5L465.195 704L584.196 818ZM1520 612.5L1121 1045L1002 931L1315 596.5L1202.5 496.5L846 865L502.5 564.5L129.5 910.837L0 795L530 308L846 596.5L1191.5 281L1520 612.5ZM1075.54 233.019L842.518 466.036L609.499 233.019L842.518 0L1075.54 233.019Z" fill="black"/>` },
+  hayat_agaci: { viewBox: "0 0 1424 872", svg: `<path d="M0 872H1424V705.254H1131.55V431.9L825.428 612.313V464.702L1131.55 254.219V54.6708L809.029 254.219V0H579.44V254.219L254.188 54.6708V254.219L579.44 448.301V612.313L254.188 431.9V705.254H0V872Z" fill="black"/>` },
+  hayat_agaci2: { viewBox: "0 0 1296 1913", svg: `<path d="M644.5 0.485352L1016.77 358.821L734.501 641.088V780.704L953.03 598.597L1259.58 580.386L734.501 1041.73V1223.83L1022.84 965.847H1296L734.501 1463.61V1621.43L962.136 1402.91H1211.02L755.747 1912.81H540.253L84.9834 1402.91H333.864L561.499 1621.43V1463.61L0 965.847H273.161L561.499 1223.83V1041.72L36.4219 580.385L342.97 598.596L561.499 780.704V641.088L279.231 358.821L644 0.490234V0.00488281L644.25 0.245117L644.5 0V0.485352ZM644.5 152L470.445 358.821L648 547.831L825.555 358.821L644.5 151.475V152ZM763.447 367.596L648.179 482.864L532.91 367.596L648.179 252.327L763.447 367.596Z" fill="black"/>` },
+  ibrik: { viewBox: "0 0 1031 1341", svg: `<path d="M663 184L547 320.5V462.5L663 683.5L899.5 273.5L1031 362.5V462.5L929 397.5L710 773L899.5 1030.5L774 1157H505L610.5 1341H237L368.5 1157H126.5L0 1030.5L237 683.5L37 320.5L95 184H273.5L447.5 0L663 184ZM130 316L271 611L372 470V316L319 259H156.5L130 316Z" fill="black"/>` },
+  ibrik2: { viewBox: "0 0 1094 1431", svg: `<path d="M787.523 14.5208L684.6 172.727L743.548 337.424L959.347 346.745L1093.15 724.871L937.08 862.264L1004.39 1111.4L799.564 1265.21L858.771 1423.91L389.564 1430.17L439.4 1249.65L243.935 1105.58L452.072 446.448L310.802 403.311L38.6779 516.174L-0.000111934 449.943L314.448 318.89L478 355.982L545.193 190.728L451.336 6.75861e-05L787.523 14.5208ZM774.376 446.356L894.55 769.342L984.946 704.182L890.761 428.361L774.376 446.356Z" fill="black"/>` },
+  kus: { viewBox: "0 0 1123 781", svg: `<path d="M0 704.483L264.14 447.228L393.779 656.99H499.111L264.14 361.476L560.69 0L760.01 361.476H499.111L716.257 656.99H760.01L926.921 406.331L1123 684.694H904.234V781H303.032V704.483H0Z" fill="black"/>` },
+  kus2: { viewBox: "0 0 1100 758", svg: `<path d="M181.242 652.904V510.65V491.125H302.535L407.098 604.091V712.873L373.638 757.502H500.507L468.441 712.873V604.091H546.5V712.873L513.055 757.502H645L609.5 712.873V604.091L1100 61.0874L1058.89 0L766.793 302.848H670.596V202.434L816.5 35.0769H695.581L571.5 161.989V322.373H373.638L312.294 393.502H101.774L0 482.757L181.242 652.904Z" fill="black"/>` },
+  kus3: { viewBox: "0 0 542 526", svg: `<path d="M275.928 0L542 437.296H376.937V525.986H275.928V465.627H333.822V437.296H252.522V525.986H137.964V437.296H213.104V203.25H0L92.3867 0H275.928ZM151.514 83.7637V103.473H171.223V83.7637H151.514Z" fill="black"/>` }
+};
+
+// ── Motif data ────────────────────────────────────────────────────────────────
+const MOTIFS = [
+  {
+    key: "akrep",
+    name: "AKREP",
+    subtitle: "Scorpion",
+    desc: "This pattern is used as a symbol of protection against scorpions and sometimes to represent a dragon. It also represents the strength and courage of confrontation. This symbol is often used with masculine connotations.",
+    variants: ["akrep"]
+  },
+  {
+    key: "ask_ve_birlesim",
+    name: "AŞK VE BİRLEŞİM",
+    subtitle: "Love and Union",
+    desc: "Motif inherited from the East, with the known Ying-Yang, means harmony between man and woman. This pattern shows the opposites that attract each other and the love a person feels for their lover.",
+    variants: ["ask_ve_birlesim"]
+  },
+  {
+    key: "bereket",
+    name: "BEREKET",
+    subtitle: "Fertility",
+    desc: "Union of the Elibelinde and Koçboynuzu patterns, which includes symbol variations on protections. The graphic represents multi-grain plants such as wheat, barley, pomegranate, poppy, melon, figs, grapes and mulberry — all used to indicate fertility.",
+    variants: ["bereket", "bereket2"]
+  },
+  {
+    key: "bukagi",
+    name: "BUKAGI",
+    subtitle: "Fetter",
+    desc: "Cuff-shaped pattern that symbolizes the continuity of family union, the dedication of lovers and the hope that they should always stay together.",
+    variants: ["bukagi", "bukagi2"]
+  },
+  {
+    key: "canavar_ayagi",
+    name: "CANAVAR AYAĞI",
+    subtitle: "Monster's Feet",
+    desc: "This pattern is used as a symbol of protection against scorpions and sometimes to represent a dragon. It also represents the strength and courage of confrontation. This symbol is often used with masculine connotations.",
+    variants: ["canavar_ayagi"]
+  },
+  {
+    key: "cengel",
+    name: "ÇENGEL",
+    subtitle: "Hook",
+    desc: "This pattern represents protection against the evil eye. The hooked form deflects malicious gazes and guards its wearer from harm.",
+    variants: ["cengel", "cengel2"]
+  },
+  {
+    key: "elibelinde",
+    name: "ELİBELİNDE",
+    subtitle: "Hands on Hips",
+    desc: "Figure design of a woman drawn from the mother goddess of Anatolia, used as a symbol of motherhood and fertility. The posture — hands on hips — represents feminine power and the divine feminine.",
+    variants: ["elibelinde", "elibelinde2"]
+  },
+  {
+    key: "hayat_agaci",
+    name: "HAYAT AĞACI",
+    subtitle: "Tree of Life",
+    desc: "A theme that represents the desire for immortality or the hope of life after death. The stylization of various plants — cypress, date palm, pomegranate, fig, olive, vine, beech and oak — symbolize the eternal tree of life.",
+    variants: ["hayat_agaci", "hayat_agaci2"]
+  },
+  {
+    key: "ibrik",
+    name: "İBRİK",
+    subtitle: "Ewer",
+    desc: "A stylized design in the form of a water container, symbolizing purity and purification. It is also used as a symbol of pregnancy and the carrying of new life.",
+    variants: ["ibrik", "ibrik2"]
+  },
+  {
+    key: "kus",
+    name: "KUŞ",
+    subtitle: "Bird",
+    desc: "A kilim pattern loaded with various meanings: luck and bad luck; happiness, joy and love; the soul of the dead; women; desire; waiting for news; power and strength. Few symbols carry such a wealth of interpretation.",
+    variants: ["kus", "kus2", "kus3"]
+  },
+];
+
+// Build flat element list for the canvas world
+const ELEMENTS = [];
+const WORLD_W = 6000, WORLD_H = 5000;
+
+function seededRng(seed) {
+  let s = seed;
+  return () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+}
+const r = seededRng(42);
+
+const ALL_VARIANTS = [];
+MOTIFS.forEach((motif, mi) => {
+  motif.variants.forEach(varKey => {
+    const svgData = SVGS[varKey];
+    if (!svgData) return;
+    const [, , vw, vh] = svgData.viewBox.split(' ').map(Number);
+    ALL_VARIANTS.push({ motifIdx: mi, varKey, svgInner: svgData.svg, svgViewBox: svgData.viewBox, svgW: vw, svgH: vh });
+  });
+});
+
+const COPIES = 12; // repeat each variant this many times
+for (let c = 0; c < COPIES; c++) {
+  ALL_VARIANTS.forEach((v, vi) => {
+    ELEMENTS.push({
+      x: r() * (WORLD_W - 200) + 100,
+      y: r() * (WORLD_H - 200) + 100,
+      motifIdx: v.motifIdx,
+      varKey: v.varKey,
+      svgInner: v.svgInner,
+      svgViewBox: v.svgViewBox,
+      svgW: v.svgW, svgH: v.svgH,
+      colorIdx: (v.motifIdx + c) % 5,
+    });
+  });
+}
+
+const COLORS = ['#cc0000','#0000cc','#006600','#996600','#660066'];
+const CREAM = '#f0e8d0';
+const BG = '#c8b89a';
+
+// ── Canvas & state ────────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+let W, H;
+let cam = { x: WORLD_W/2, y: WORLD_H/2, zoom: 0.25 };
+let tgt = { x: WORLD_W/2, y: WORLD_H/2, zoom: 0.25 };
+let isDragging = false, dragMoved = false;
+let lastMouse = {x:0,y:0};
+let mousePos = {x:0,y:0};
+let hoveredIdx = -1;
+
+// ── SVG → Image cache via data URI (works in sandboxed iframes) ──────────────
+const imgCache = {};
+function getSvgImage(el, color, hovered, cb) {
+  const cacheKey = el.varKey + '_' + color + '_' + hovered;
+  if (imgCache[cacheKey]) { cb(imgCache[cacheKey]); return; }
+  const fillColor = hovered ? CREAM : color;
+  const bgColor   = hovered ? color : CREAM;
+  const svgStr = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${el.svgViewBox}">
+    <rect x="0" y="0" width="${el.svgW}" height="${el.svgH}" fill="${bgColor}"/>
+    ${el.svgInner.replace(/fill="black"/g, `fill="${fillColor}"`)}
+  </svg>`;
+  const b64 = btoa(unescape(encodeURIComponent(svgStr)));
+  const url = 'data:image/svg+xml;base64,' + b64;
+  const img = new Image();
+  img.onload = () => { imgCache[cacheKey] = img; cb(img); };
+  img.onerror = () => { imgCache[cacheKey] = null; cb(null); };
+  img.src = url;
+}
+
+// Pre-render all
+ELEMENTS.forEach(el => {
+  const col = COLORS[el.colorIdx];
+  getSvgImage(el, col, false, ()=>{});
+  getSvgImage(el, col, true, ()=>{});
+});
+
+// ── Resize ────────────────────────────────────────────────────────────────────
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function worldToScreen(wx, wy) {
+  return { x: (wx - cam.x)*cam.zoom + W/2, y: (wy - cam.y)*cam.zoom + H/2 };
+}
+function screenToWorld(sx, sy) {
+  return { x: (sx - W/2)/cam.zoom + cam.x, y: (sy - H/2)/cam.zoom + cam.y };
+}
+
+// ── Background grid (pixel-art) ───────────────────────────────────────────────
+function drawBg() {
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, W, H);
+  const step = 60 * cam.zoom;
+  const ox = ((-cam.x*cam.zoom + W/2) % step + step) % step;
+  const oy = ((-cam.y*cam.zoom + H/2) % step + step) % step;
+  ctx.strokeStyle = 'rgba(0,0,0,0.07)';
+  ctx.lineWidth = 1;
+  for (let x = ox-step; x < W+step; x += step) {
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+  }
+  for (let y = oy-step; y < H+step; y += step) {
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+}
+
+// ── Hit test ──────────────────────────────────────────────────────────────────
+const BOX = 70; // half-size in world units
+function hitTest(sx, sy) {
+  for (let i = ELEMENTS.length-1; i >= 0; i--) {
+    const el = ELEMENTS[i];
+    const s = worldToScreen(el.x, el.y);
+    const half = BOX * cam.zoom;
+    if (Math.abs(sx - s.x) < half && Math.abs(sy - s.y) < half) return i;
+  }
+  return -1;
+}
+
+// ── Draw ──────────────────────────────────────────────────────────────────────
+function drawElements() {
+  ELEMENTS.forEach((el, i) => {
+    const s = worldToScreen(el.x, el.y);
+    const half = BOX * cam.zoom;
+    if (s.x + half < 0 || s.x - half > W || s.y + half < 0 || s.y - half > H) return;
+
+    const isHov = i === hoveredIdx;
+    const col = COLORS[el.colorIdx];
+    const cacheKey = el.varKey + '_' + col + '_' + isHov;
+    const img = imgCache[cacheKey];
+
+    const bx = s.x - half, by = s.y - half, bw = half*2, bh = half*2;
+
+    // Border box
+    ctx.fillStyle = isHov ? col : CREAM;
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = isHov ? 3 : 2;
+    ctx.strokeRect(bx, by, bw, bh);
+
+    // Pixel inner shadow (net.art)
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx+3, by+3, bw-6, bh-6);
+
+    // SVG image
+    if (img) {
+      const pad = half * 0.12;
+      ctx.drawImage(img, bx+pad, by+pad, bw-pad*2, bh-pad*2);
+    }
+
+    // Name label
+    if (cam.zoom > 0.5) {
+      const motif = MOTIFS[el.motifIdx];
+      ctx.save();
+      ctx.font = `${Math.max(9, 11*cam.zoom)}px VT323, monospace`;
+      ctx.fillStyle = isHov ? CREAM : col;
+      ctx.textAlign = 'center';
+      // background strip
+      const tw = ctx.measureText(motif.name).width;
+      ctx.fillStyle = isHov ? col : 'rgba(240,232,208,0.85)';
+      ctx.fillRect(s.x - tw/2 - 3, s.y + half + 2, tw + 6, 14*cam.zoom);
+      ctx.fillStyle = isHov ? CREAM : col;
+      ctx.fillText(motif.name, s.x, s.y + half + 13*cam.zoom);
+      ctx.restore();
+    }
+  });
+}
+
+// ── Tooltip ───────────────────────────────────────────────────────────────────
+function drawTooltip() {
+  if (hoveredIdx < 0) return;
+  const el = ELEMENTS[hoveredIdx];
+  const motif = MOTIFS[el.motifIdx];
+  const s = worldToScreen(el.x, el.y);
+  const half = BOX * cam.zoom;
+  const label = `► ${motif.name} — ${motif.subtitle} ◄  [CLICK]`;
+  ctx.save();
+  ctx.font = '15px VT323, monospace';
+  const tw = ctx.measureText(label).width;
+  const lx = Math.min(Math.max(mousePos.x + 16, 4), W - tw - 10);
+  const ly = mousePos.y - 14;
+  ctx.fillStyle = COLORS[el.colorIdx];
+  ctx.fillRect(lx-4, ly-14, tw+8, 20);
+  ctx.fillStyle = CREAM;
+  ctx.fillText(label, lx, ly);
+  ctx.restore();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+document.getElementById('zoom-display').textContent = '1.00×';
+
+function render() {
+  cam.x += (tgt.x - cam.x) * 0.12;
+  cam.y += (tgt.y - cam.y) * 0.12;
+  cam.zoom += (tgt.zoom - cam.zoom) * 0.12;
+  drawBg();
+  drawElements();
+  drawTooltip();
+  document.getElementById('zoom-display').textContent = cam.zoom.toFixed(2) + '×';
+  requestAnimationFrame(render);
+}
+
+// ── Panel ─────────────────────────────────────────────────────────────────────
+function openPanel(motifIdx, varKey) {
+  const motif = MOTIFS[motifIdx];
+  const el = ELEMENTS.find(e => e.varKey === varKey);
+  const col = COLORS[el ? el.colorIdx : 0];
+
+  document.getElementById('panel-name').textContent = motif.name;
+  document.getElementById('panel-subtitle').textContent = motif.subtitle;
+  document.getElementById('panel-desc').textContent = motif.desc;
+  document.getElementById('panel-title').textContent = 'MOTIF — ' + motif.name;
+
+  // Inject coloured SVG
+  const svgData = SVGS[varKey];
+  const svgEl = document.getElementById('panel-svg-inner');
+  svgEl.setAttribute('viewBox', svgData.viewBox);
+  svgEl.innerHTML = svgData.svg.replace(/fill="black"/g, `fill="${col}"`);
+  svgEl.style.background = CREAM;
+
+  document.getElementById('panel').classList.add('open');
+}
+window.closePanel = function() {
+  document.getElementById('panel').classList.remove('open');
+};
+
+// ── Input ─────────────────────────────────────────────────────────────────────
+canvas.addEventListener('mousedown', e => {
+  isDragging = true; dragMoved = false;
+  lastMouse = {x:e.clientX, y:e.clientY};
+  document.body.classList.add('dragging');
+});
+window.addEventListener('mousemove', e => {
+  mousePos = {x:e.clientX, y:e.clientY};
+  document.getElementById('cursor-fx').style.left = e.clientX+'px';
+  document.getElementById('cursor-fx').style.top = e.clientY+'px';
+  if (isDragging) {
+    const dx = e.clientX - lastMouse.x, dy = e.clientY - lastMouse.y;
+    if (Math.abs(dx)+Math.abs(dy) > 3) dragMoved = true;
+    tgt.x -= dx / cam.zoom;
+    tgt.y -= dy / cam.zoom;
+    lastMouse = {x:e.clientX, y:e.clientY};
+    hoveredIdx = -1;
+  } else {
+    hoveredIdx = hitTest(e.clientX, e.clientY);
+    canvas.style.cursor = hoveredIdx >= 0 ? 'pointer' : '';
+  }
+});
+window.addEventListener('mouseup', e => {
+  document.body.classList.remove('dragging');
+  if (!dragMoved) {
+    const idx = hitTest(e.clientX, e.clientY);
+    if (idx >= 0) openPanel(ELEMENTS[idx].motifIdx, ELEMENTS[idx].varKey);
+  }
+  isDragging = false;
+});
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const f = e.deltaY > 0 ? 0.9 : 1.1;
+  const wx = (e.clientX - W/2)/cam.zoom + cam.x;
+  const wy = (e.clientY - H/2)/cam.zoom + cam.y;
+  tgt.zoom = Math.max(0.15, Math.min(4, tgt.zoom * f));
+  tgt.x = wx - (e.clientX - W/2)/tgt.zoom;
+  tgt.y = wy - (e.clientY - H/2)/tgt.zoom;
+}, {passive:false});
+
+// Touch
+let lt=[];
+canvas.addEventListener('touchstart', e=>{
+  lt=[...e.touches];
+  if(e.touches.length===1){isDragging=true;dragMoved=false;lastMouse={x:e.touches[0].clientX,y:e.touches[0].clientY};}
+});
+canvas.addEventListener('touchmove', e=>{
+  e.preventDefault();
+  if(e.touches.length===1&&isDragging){
+    const dx=e.touches[0].clientX-lastMouse.x,dy=e.touches[0].clientY-lastMouse.y;
+    if(Math.abs(dx)+Math.abs(dy)>3)dragMoved=true;
+    tgt.x-=dx/cam.zoom;tgt.y-=dy/cam.zoom;
+    lastMouse={x:e.touches[0].clientX,y:e.touches[0].clientY};
+  }else if(e.touches.length===2&&lt.length===2){
+    const d0=Math.hypot(lt[0].clientX-lt[1].clientX,lt[0].clientY-lt[1].clientY);
+    const d1=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    tgt.zoom=Math.max(0.15,Math.min(4,tgt.zoom*(d1/d0)));lt=[...e.touches];
+  }
+},{passive:false});
+canvas.addEventListener('touchend',e=>{
+  if(!dragMoved&&e.changedTouches.length===1){
+    const t=e.changedTouches[0];
+    const idx=hitTest(t.clientX,t.clientY);
+    if(idx>=0)openPanel(ELEMENTS[idx].motifIdx,ELEMENTS[idx].varKey);
+  }
+  isDragging=false;
+});
+
+// Visitor counter
+let count=4721;
+setInterval(()=>{count+=Math.floor(Math.random()*3);document.getElementById('count').textContent=String(count).padStart(6,'0');},3000);
+
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
